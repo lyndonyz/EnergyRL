@@ -1,8 +1,9 @@
 # EnergyRL: Energy Usage in Relation to Reinforcement Learning Project
 ### Tool versions:
-<p>Python Verison: 3.10.11 <br>
+Python Verison: 3.10.11 <br>
 numpy Version: 2.2.6 <br>
-matplotlib Version: 3.10.8</p>
+matplotlib Version: 3.10.8
+
 ---
 ### How to run project:
 Depending on what you are on, you might need to run a virtual environment. <br>
@@ -17,5 +18,5 @@ Install numpy using: `pip install numpy`<br>
 Install matplotlib using: `pip install matplotlib`<br>
 <br>
 You can then run:<br>
-`python TestEnergy.py` for our testing of adding energy.
+`python TestEnergy.py` for our testing of adding energy.<br>
 `python TestEnergyMaze.py` for energy usage visualization within a maze.
