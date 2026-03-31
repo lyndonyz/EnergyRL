@@ -1,13 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 from MDP import MDP
 from RL import RL
 
 # 0 = Path (1 energy), 1 = Mud (2 energy), 2 = Trap (-50 reward), 3 = Goal (+100 reward)
 maze = np.array([
     [0, 0, 0, 0, 3],
-    [0, 1, 1, 0, 0],
-    [0, 2, 0, 1, 0],
+    [0, 1, 1, 1, 1],
+    [0, 2, 0, 1, 1],
     [0, 0, 0, 1, 0]
 ])
 rows, cols = maze.shape
@@ -63,12 +64,12 @@ def identity_reward(r): return r
 mdp = MDP(T, R, discount=0.95)
 rl_agent = RL(mdp, identity_reward)
 
-s0 = state_to_idx[(0, 0, max_energy)]
+s0 = state_to_idx[(3, 2, max_energy)]
 Q, policy = rl_agent.qLearning(s0, np.zeros((nActions, nStates)), nEpisodes=5000, nSteps=50, epsilon=0.1)
 
 def plot_maze_path(maze, policy, states):
     path_mask = np.zeros_like(maze, dtype=float)
-    curr_s = (0, 0, max_energy)
+    curr_s = (3, 2, max_energy)
     
     for _ in range(20):
         r, c, e = curr_s
@@ -80,7 +81,10 @@ def plot_maze_path(maze, policy, states):
         nr, nc = np.clip(r+dr, 0, rows-1), np.clip(c+dc, 0, cols-1)
         curr_s = (nr, nc, max(0, e-1))
 
-    plt.imshow(maze, cmap='cool')
+    colors = ['lightskyblue', 'steelblue', 'red', 'green']
+    cmap = ListedColormap(colors)
+
+    plt.imshow(maze, cmap=cmap)
     plt.title("Maze: Goal(3), Trap(2), Mud(1)")
     plt.show()
 
