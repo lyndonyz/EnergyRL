@@ -1,8 +1,8 @@
 # EnergyRL: Energy Usage in Relation to Reinforcement Learning Project
 ### Tool versions:
-Python Verison: 3.10.11 <br>
+<p>Python Verison: 3.10.11 <br>
 numpy Version: 2.2.6 <br>
-matplotlib Version: 3.10.8
+matplotlib Version: 3.10.8</p>
 ---
 ### How to run project:
 Depending on what you are on, you might need to run a virtual environment. <br>
