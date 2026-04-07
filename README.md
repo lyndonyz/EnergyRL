@@ -18,5 +18,5 @@ Install numpy using: `pip install numpy`<br>
 Install matplotlib using: `pip install matplotlib`<br>
 <br>
 You can then run:<br>
-`python TestEnergy.py` for our testing of adding energy.<br>
-`python TestEnergyMaze.py` for energy usage visualization within a maze.
+`python TestRoverMars.py (yes || Null)` to show training of rover on singluar map. Adding yes afterwards saves an image for each 100 episodes (50 total images). By default will show the final route, Avg reward per episode, Avg Energy per episode<br>
+`python TestTrainedRover.py (yes || Null)` to show simulations of the trained rover on 50 random maps. Adding yes shows the most optimal route using A*. By default no optimal route will show. Will save 50 total images.
