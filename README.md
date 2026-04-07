@@ -1,4 +1,4 @@
-# EnergyRL: Energy Usage in Relation to Reinforcement Learning Project
+# EnergyRL: Energy Usage in Relation to Reinforcement Learning Project Setup
 ### Tool versions:
 Python Verison: 3.10.11 <br>
 numpy Version: 2.2.6 <br>
@@ -23,7 +23,9 @@ You can then run:<br>
 
 # Rover Energy & Mission Mechanics
 
-This document describes the energy consumption, movement rules, and reward system for the Mars Rover simulation.
+This section describes the energy consumption, movement rules, and reward system for the Rover simulation.
+
+Please note that these numbers are pulled roughly from external sources, and are not accurate to actual real world energy usage. They are similar enough, but not an exact model. This is due to energy usage being more of a factor on the model and design of the rover we are testing it on.
 
 ---
 
@@ -31,7 +33,9 @@ This document describes the energy consumption, movement rules, and reward syste
 
 Energy is the most critical resource for the rover. Every action consumes energy, modified by momentum (turning) and terrain (slope).
 
-### 1. Base Costs
+### Base Costs 
+
+These are just some costs to help standarize the energy usage throughout our project.
 
 | Action | Energy Cost | Notes |
 |--------|------------|-------|
@@ -39,7 +43,7 @@ Energy is the most critical resource for the rover. Every action consumes energy
 | Standard Move (`energy_move`) | 1.0 | Moving to an adjacent cell. |
 | Failed Move / Stop (`energy_stop`) | 0.3 | Occurs if the rover hits a boundary or a slope too steep. |
 
-### 2. Turning & Momentum
+### Turning & Momentum
 
 Energy cost increases if the rover changes direction from its last action:
 
@@ -49,7 +53,7 @@ Energy cost increases if the rover changes direction from its last action:
 | 90° Turn | 1.4 | Moving Up then Right |
 | 180° Turn (U-turn) | 1.8 | Moving Up then Down |
 
-### 3. Terrain & Slope Modifiers
+### Terrain & Slope Modifiers
 
 Energy cost is influenced by elevation changes (`Δe`) between the current and target cell.
 
