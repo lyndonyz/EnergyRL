@@ -1,5 +1,5 @@
 import numpy as np
-import MDP
+from RoverMDP import RoverMDP
 
 class RL:
     def __init__(self,mdp,sampleReward):
