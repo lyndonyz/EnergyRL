@@ -55,10 +55,10 @@ Energy cost increases if the rover changes direction from its last action:
 
 ### Terrain & Slope Modifiers
 
-Energy cost is influenced by elevation changes (`Δe`) between the current and target cell.
+Energy cost is influenced by elevation changes (`Δe`) between the current and target cell. The reason behind this is to make our model really think about whether or not to use extra energy when moving up in elevation as it uses more energy when moving up in general based on slope. Another thing to note is that moving downhill in general reduces energy cost but stopping to turn uses more energy as the rover must maintain its position without falling over. All of these calculations roughly follow that logic.
 
 #### Uphill Movement (`Δe > 0`)
-Cost = Base Move + (Δe * 0.15 * Multiplier)
+Cost = Base Movement cost + (Δe * 0.15 * Multiplier)
 
 
 The multiplier depends on the slope angle `θ` (calculated via arctan):
@@ -100,19 +100,19 @@ Downhill reduces energy cost (minimum multiplier of 0.3):
 
 The rover uses `get_observation` to perceive its surroundings:
 
-- **Local Terrain**: 5x5 elevation grid centered on current position  
+- **Local Terrain**: 5x5 elevation grid centered on current position. This is to simulate a rovers roughly 2meter x 2meter view distence.  
 - **Navigation**: Direction vectors to Goal, Start, and remaining Charging Stations  
 - **Vitals**: Current energy and elapsed time  
 
 ### Recharging
 
 - **Charging Stations**: 3 stations on the map  
-- **Energy Boost**: +50 energy per station (capped at max 100)  
+- **Energy Boost**: +50 energy per station (Energy is capped at max 100)  
 - **One-time Use**: Deactivated after visit (tracked with `visited_mask`)  
 
 ### Movement Constraints
 
-- **Max Slope**: 2.0 m vertical difference (`max_slope`)  
+- **Max Slope**: 2.0 m vertical difference as rovers wouldn't be able to make a distance like that. (`max_slope`)  
 - **Energy Discretization**: Energy divided into 20-unit chunks for Q-learning  
 
 ---
