@@ -70,11 +70,11 @@ The multiplier depends on the slope angle `θ` (calculated via arctan):
 
 Downhill reduces energy cost (minimum multiplier of 0.3):
 
-| Vertical Drop (|Δe|) | Multiplier Formula |
-|-----------------|-----------------|
-| ≤ 0.3 m | 0.9 - (|Δe| / 0.3) × 0.2 |
-| 0.3 m < |Δe| ≤ 1.0 m | 0.8 - ((|Δe| - 0.3) / 0.7) × 0.3 |
-| > 1.0 m | 0.6 - ((|Δe| - 1.0) / 1.0) × 0.3 |
+| Vertical Drop (`|Δe|`) | Multiplier Formula |
+|------------------------|-----------------|
+| ≤ 0.3 m | 0.9 - (`|Δe|` / 0.3) × 0.2 |
+| 0.3 m < `|Δe|` ≤ 1.0 m | 0.8 - ((`|Δe|` - 0.3) / 0.7) × 0.3 |
+| > 1.0 m | 0.6 - ((`|Δe|` - 1.0) / 1.0) × 0.3 |
 
 ---
 
