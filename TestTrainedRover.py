@@ -13,22 +13,38 @@ if not os.path.exists(output_dir):
 class RealWorldTransferPolicy:
     def __init__(self, height=20, width=30):
         self.visited_map = np.zeros((height, width))
+        self.last_goal_reached = False
+        self.height = height
+        self.width = width
 
     def get_action(self, obs, curr_y, curr_x):
+        goal_reached = obs['goal_reached']
+        
+        if goal_reached != self.last_goal_reached:
+            self.visited_map = np.zeros((self.height, self.width))
+            self.last_goal_reached = goal_reached
+        
         self.visited_map[curr_y, curr_x] += 1
         
         energy = obs['energy']
-        goal_dist = obs['goal_distance']
+        objective_dist = obs['objective_distance']
         
         go_charge = False
-        if obs['charging_stations']:
+        closest_charger = None
+        
+        if not goal_reached and obs['charging_stations']:
             closest_charger = min(obs['charging_stations'], key=lambda x: x['distance'])
             if energy < 10:
                 go_charge = True
-            elif energy < 35 and closest_charger['distance'] < goal_dist:
+            elif energy < 35 and closest_charger['distance'] < objective_dist:
+                go_charge = True
+        elif goal_reached and obs['charging_stations']:
+            energy_needed_estimate = objective_dist * 2.5
+            if energy < energy_needed_estimate:
+                closest_charger = min(obs['charging_stations'], key=lambda x: x['distance'])
                 go_charge = True
 
-        target_dir = closest_charger['direction'] if go_charge else obs['goal_direction']
+        target_dir = closest_charger['direction'] if go_charge else obs['objective_direction']
         
         local_grid = obs['local_grid']
         deltas = [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -109,7 +125,7 @@ def export_enhanced_slideshow(n_maps=50, show_optimal=False):
         mdp = RoverMDP(terrain, stations, goal, start)
         policy = RealWorldTransferPolicy(20, 30)
         
-        state = (start[0], start[1], 100, 0, 0, -1, -1)
+        state = (start[0], start[1], 100, 0, 0, -1, -1, False)
         path = [start]
         for _ in range(mdp.max_time):
             obs = mdp.get_observation(state)
@@ -122,6 +138,10 @@ def export_enhanced_slideshow(n_maps=50, show_optimal=False):
         if show_optimal:
             opt_path = get_optimal_benchmark(terrain, start, goal, stations)
 
+        visit_count = {}
+        for py, px in path:
+            visit_count[(py, px)] = visit_count.get((py, px), 0) + 1
+
         plt.figure(figsize=(12, 7))
         plt.imshow(terrain, cmap='hot', alpha=0.7)
         
@@ -130,12 +150,22 @@ def export_enhanced_slideshow(n_maps=50, show_optimal=False):
             plt.plot(ox, oy, color='white', linestyle='--', alpha=0.8, label='Optimal Path (A*)', zorder=2)
         
         py, px = zip(*path)
-        plt.plot(px, py, color='cyan', linewidth=2.5, label='Actual Rover Path', zorder=3)
+        for i in range(len(path) - 1):
+            py_cur, px_cur = path[i]
+            overlap = visit_count[(py_cur, px_cur)]
+            if overlap == 1:
+                plt.plot([px_cur], [py_cur], 'c.', markersize=6, alpha=0.7)
+            elif overlap == 2:
+                plt.plot([px_cur], [py_cur], 'y.', markersize=6, alpha=0.7)
+            else:
+                plt.plot([px_cur], [py_cur], 'r.', markersize=6, alpha=0.8)
         
-        plt.scatter(start[1], start[0], c='green', marker='*', s=250, label='Start', edgecolors='black', zorder=5)
+        plt.plot(px, py, color='cyan', linewidth=0.8, alpha=0.3)
+        
+        plt.scatter(start[1], start[0], c='green', marker='*', s=250, label='Start/Base', edgecolors='black', zorder=5)
         plt.scatter(goal[1], goal[0], c='blue', marker='*', s=250, label='Goal', edgecolors='black', zorder=5)
         
-        if (state[0], state[1]) != goal:
+        if (state[0], state[1]) != start:
             plt.scatter(state[1], state[0], c='red', marker='X', s=200, label='Failed/Died', zorder=6)
         
         for i, (sy, sx) in enumerate(stations):

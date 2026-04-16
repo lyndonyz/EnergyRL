@@ -11,28 +11,41 @@ import matplotlib.patches as mpatches
 class RealWorldRoverPolicy:
     def __init__(self, height=20, width=30):
         self.visited_map = np.zeros((height, width))
+        self.last_goal_reached = False
+        self.height = height
+        self.width = width
 
     def get_action(self, obs, current_y, current_x):
+        goal_reached = obs['goal_reached']
+        
+        if goal_reached != self.last_goal_reached:
+            self.visited_map = np.zeros((self.height, self.width))
+            self.last_goal_reached = goal_reached
+        
         self.visited_map[current_y, current_x] += 1
         
         energy = obs['energy']
-        goal_dist = obs['goal_distance']
+        objective_dist = obs['objective_distance']
         
-        closest_charger = None
-        if obs['charging_stations']:
-            closest_charger = min(obs['charging_stations'], key=lambda x: x['distance'])
-
         go_charge = False
-        if closest_charger:
+        closest_charger = None
+        
+        if not goal_reached and obs['charging_stations']:
+            closest_charger = min(obs['charging_stations'], key=lambda x: x['distance'])
             if energy < 10:
                 go_charge = True
-            elif energy < 35 and closest_charger['distance'] < goal_dist:
+            elif energy < 35 and closest_charger['distance'] < objective_dist:
+                go_charge = True
+        elif goal_reached and obs['charging_stations']:
+            energy_needed_estimate = objective_dist * 2.5
+            if energy < energy_needed_estimate:
+                closest_charger = min(obs['charging_stations'], key=lambda x: x['distance'])
                 go_charge = True
         
         if go_charge:
             target_dir = closest_charger['direction']
         else:
-            target_dir = obs['goal_direction']
+            target_dir = obs['objective_direction']
         
         local_grid = obs['local_grid']
         deltas = [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -59,7 +72,7 @@ def run_mission(terrain, stations, goal, start):
     mdp = RoverMDP(terrain, stations, goal, start)
     policy = RealWorldRoverPolicy(height=terrain.shape[0], width=terrain.shape[1])
     
-    state = (start[0], start[1], 100, 0, 0, -1, -1)
+    state = (start[0], start[1], 100, 0, 0, -1, -1, False)
     path = [start]
     
     for _ in range(mdp.max_time):
@@ -149,25 +162,48 @@ def visualize_terrain(terrain, start, goal, charging_stations):
     plt.tight_layout()
     plt.show()
 
-def visualize_rover_path(terrain, start, goal, charging_stations, states_visited):
+def visualize_rover_path_with_overlaps(terrain, start, goal, charging_stations, states_visited):
     fig, ax = plt.subplots(figsize=(14, 10))
     im = ax.imshow(terrain, cmap='hot', origin='upper', alpha=0.7)
+    
     if len(states_visited) > 0:
         path_y = [s[0] for s in states_visited]
         path_x = [s[1] for s in states_visited]
-        ax.plot(path_x, path_y, 'c-', linewidth=1.5, alpha=0.7, label='Path')
-        ax.plot(path_x, path_y, 'c.', markersize=4)
-    ax.plot(start[1], start[0], 'g*', markersize=20, label='Start', zorder=5)
+        
+        visit_count = {}
+        for i, (py, px) in enumerate(states_visited):
+            visit_count[(py, px)] = visit_count.get((py, px), 0) + 1
+        
+        for i in range(len(states_visited) - 1):
+            py, px = states_visited[i]
+            overlap = visit_count[(py, px)]
+            if overlap == 1:
+                ax.plot([px], [py], 'c.', markersize=6, alpha=0.7)
+            elif overlap == 2:
+                ax.plot([px], [py], 'y.', markersize=6, alpha=0.7)
+            else:
+                ax.plot([px], [py], 'r.', markersize=6, alpha=0.8)
+        
+        ax.plot(path_x, path_y, 'c-', linewidth=1.5, alpha=0.4, label='Path')
+    
+    ax.plot(start[1], start[0], 'g*', markersize=20, label='Start/Base', zorder=5)
     ax.plot(goal[1], goal[0], 'b*', markersize=20, label='Goal', zorder=5)
     for cs in charging_stations:
         ax.plot(cs[1], cs[0], 'o', color='purple', markersize=12, zorder=4)
+    
     ax.set_xlabel('X Position (meters)')
     ax.set_ylabel('Y Position (meters)')
-    ax.set_title('Rover Path Visualization')
-    ax.legend(loc='upper left', bbox_to_anchor=(-0.15, 1))
+    ax.set_title('Rover Path Visualization (with Overlap Detection)')
+    cyan_patch = mpatches.Patch(color='cyan', label='Single visit')
+    yellow_patch = mpatches.Patch(color='yellow', label='Double visit')
+    red_patch = mpatches.Patch(color='red', label='Triple+ visits')
+    ax.legend(handles=[cyan_patch, yellow_patch, red_patch] + [ax.get_legend_handles_labels()[0][i] for i in range(3)], 
+              loc='upper left', bbox_to_anchor=(-0.15, 1))
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
+
+
 
 def plot_learning_curve(episode_rewards, window_size=50):
     plt.figure(figsize=(12, 6))
@@ -204,16 +240,17 @@ if __name__ == "__main__":
     mdp, terrain, start, goal, charging_stations = create_rover_mdp(seed=42)
     visualize_terrain(terrain, start, goal, charging_stations)
     rl_agent = RL(mdp, lambda r: r)
-    initial_state = (start[0], start[1], mdp.max_energy, 0, 0, -1, -1)
+    initial_state = (start[0], start[1], mdp.max_energy, 0, 0, -1, -1, False)
     
-    n_episodes = 5000
+    n_episodes = 8000
     episode_rewards, episode_energy_used = [], []
     best_reward, best_path = -np.inf, None
     Q_table, learning_rate, discount_factor = {}, 0.1, 0.9
     
     def discretize_state(state):
-        y, x, energy, time_step, visited_mask, last_action, last_dir = state
-        return (int(y), int(x), int(energy / 20), visited_mask, last_action)
+        y, x, energy, time_step, visited_mask, last_action, last_dir, goal_reached = state
+        return (int(y), int(x), int(energy / 20), visited_mask, last_action, goal_reached)
+    
     
     def plot_efficiency_vs_reward_overlay(episode_rewards, episode_energy_used, window_size=100):
         if len(episode_rewards) < window_size: return
@@ -240,7 +277,7 @@ if __name__ == "__main__":
         state = initial_state
         episode_reward = episode_total_energy_used = steps_in_episode = 0
         visited_positions = [(state[0], state[1])]
-        epsilon = max(0.01, 0.5 * (0.995 ** episode))
+        epsilon = max(0.01, 0.25 * (0.9992 ** episode))
         
         while steps_in_episode < mdp.max_time:
             obs = mdp.get_observation(state)
@@ -252,9 +289,9 @@ if __name__ == "__main__":
             else:
                 best_actions = [a for a in range(4) if Q_table[discrete_state][a] == max(Q_table[discrete_state].values())]
                 if len(best_actions) > 1:
-                    goal_direction = obs['goal_direction']
+                    objective_direction = obs['objective_direction']
                     action_directions = [-np.pi/2, np.pi/2, np.pi, 0]
-                    direction_alignment = {a: -abs(np.arctan2(np.sin(goal_direction - action_directions[a]), np.cos(goal_direction - action_directions[a]))) for a in best_actions}
+                    direction_alignment = {a: -abs(np.arctan2(np.sin(objective_direction - action_directions[a]), np.cos(objective_direction - action_directions[a]))) for a in best_actions}
                     action = max(best_actions, key=lambda a: direction_alignment[a])
                 else:
                     action = best_actions[0]
@@ -262,8 +299,8 @@ if __name__ == "__main__":
             y, x, last_action = state[0], state[1], state[5]
             is_valid, _, _ = mdp.calculate_energy_cost(y, x, action, last_action)
             if not is_valid:
-                goal_direction, action_directions = obs['goal_direction'], [-np.pi/2, np.pi/2, np.pi, 0]
-                valid_alts = [(a, -abs(np.arctan2(np.sin(goal_direction - action_directions[a]), np.cos(goal_direction - action_directions[a])))) for a in range(4) if mdp.calculate_energy_cost(y, x, a, last_action)[0]]
+                objective_direction, action_directions = obs['objective_direction'], [-np.pi/2, np.pi/2, np.pi, 0]
+                valid_alts = [(a, -abs(np.arctan2(np.sin(objective_direction - action_directions[a]), np.cos(objective_direction - action_directions[a])))) for a in range(4) if mdp.calculate_energy_cost(y, x, a, last_action)[0]]
                 action = max(valid_alts, key=lambda x: x[1])[0] if valid_alts else np.random.randint(0, 4)
             
             next_state, reward, done, info = mdp.step(state, action)
@@ -274,7 +311,7 @@ if __name__ == "__main__":
             
             next_ds = discretize_state(next_state)
             if next_ds not in Q_table: Q_table[next_ds] = {a: 0.0 for a in range(4)}
-            Q_table[discrete_state][action] += max(0.01, learning_rate * (0.999 ** episode)) * (reward + discount_factor * max(Q_table[next_ds].values()) - Q_table[discrete_state][action])
+            Q_table[discrete_state][action] += max(0.01, learning_rate * (0.9992 ** episode)) * (reward + discount_factor * max(Q_table[next_ds].values()) - Q_table[discrete_state][action])
             
             state = next_state
             if done: break
@@ -291,7 +328,7 @@ if __name__ == "__main__":
         if (episode + 1) % 100 == 0:
             print(f"Episode {episode+1}/{n_episodes} - Avg Reward: {np.mean(episode_rewards[-100:]):.2f} | Best: {best_reward:.2f}")
     
-    visualize_rover_path(terrain, start, goal, charging_stations, best_path)
+    visualize_rover_path_with_overlaps(terrain, start, goal, charging_stations, best_path)
     plot_learning_curve(episode_rewards, window_size=50)
     plot_energy_efficiency(episode_energy_used, window_size=50)
     plot_efficiency_vs_reward_overlay(episode_rewards, episode_energy_used, window_size=50)

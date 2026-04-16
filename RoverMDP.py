@@ -124,14 +124,17 @@ class RoverMDP:
         return True, (dy, dx), energy_cost
     
     def step(self, state, action):
-        y, x, energy, time_step, visited_mask, last_action, last_dir = state
+        y, x, energy, time_step, visited_mask, last_action, last_dir, goal_reached = state
         
         energy -= self.energy_per_step
         time_step += 1
         
         if energy <= 0 or time_step >= self.max_time:
-            distance = abs(self.goal[0] - y) + abs(self.goal[1] - x)
-            return state, self._calculate_reward(0, time_step, energy, False, False, distance, distance), True, {}        
+            if goal_reached:
+                distance = abs(self.start[0] - y) + abs(self.start[1] - x)
+            else:
+                distance = abs(self.goal[0] - y) + abs(self.goal[1] - x)
+            return state, self._calculate_reward(0, time_step, energy, False, False, False, distance, distance, goal_reached), True, {}        
         
         can_move_anywhere = False
         for check_action in range(4):
@@ -141,60 +144,82 @@ class RoverMDP:
                 break
         
         if not can_move_anywhere:
-            distance = abs(self.goal[0] - y) + abs(self.goal[1] - x)
-            return state, self._calculate_reward(0, time_step, 0, False, False, distance, distance), True, {'stuck': True}        
+            if goal_reached:
+                distance = abs(self.start[0] - y) + abs(self.start[1] - x)
+            else:
+                distance = abs(self.goal[0] - y) + abs(self.goal[1] - x)
+            return state, self._calculate_reward(0, time_step, 0, False, False, False, distance, distance, goal_reached), True, {'stuck': True}        
         
         is_valid, (dy, dx), energy_cost = self.calculate_energy_cost(y, x, action, last_action)
         
         if not is_valid:
             energy -= energy_cost
-            next_state = (y, x, max(0, energy), time_step, visited_mask, -1, -1)
-            distance = abs(self.goal[0] - y) + abs(self.goal[1] - x)
-            reward = self._calculate_reward(energy_cost, time_step, energy, False, False, distance, distance)
+            next_state = (y, x, max(0, energy), time_step, visited_mask, -1, -1, goal_reached)
+            if goal_reached:
+                distance = abs(self.start[0] - y) + abs(self.start[1] - x)
+            else:
+                distance = abs(self.goal[0] - y) + abs(self.goal[1] - x)
+            reward = self._calculate_reward(energy_cost, time_step, energy, False, False, False, distance, distance, goal_reached)
             done = energy <= 0 or time_step >= self.max_time
             return next_state, reward, done, {}
         
-        old_distance = abs(self.goal[0] - y) + abs(self.goal[1] - x)
+        if goal_reached:
+            old_distance = abs(self.start[0] - y) + abs(self.start[1] - x)
+        else:
+            old_distance = abs(self.goal[0] - y) + abs(self.goal[1] - x)
         next_y, next_x = y + dy, x + dx
         energy -= energy_cost
-        new_distance = abs(self.goal[0] - next_y) + abs(self.goal[1] - next_x)
+        if goal_reached:
+            new_distance = abs(self.start[0] - next_y) + abs(self.start[1] - next_x)
+        else:
+            new_distance = abs(self.goal[0] - next_y) + abs(self.goal[1] - next_x)
         
         if energy < 0:
             energy = 0
         
         new_visited_mask = visited_mask
-        goal_reached = (next_y, next_x) == self.goal
+        new_goal_reached = goal_reached
+        goal_just_reached = False
         at_charging_station = False
+        base_reached = False
+        
+        if not goal_reached and (next_y, next_x) == self.goal:
+            goal_just_reached = True
+            new_goal_reached = True
+        
+        if goal_reached and (next_y, next_x) == self.start:
+            base_reached = True
         
         if (next_y, next_x) in self.charging_station_dict:
             station_idx = self.charging_station_dict[(next_y, next_x)]
             if (visited_mask & (1 << station_idx)) == 0:
                 at_charging_station = True
         
-        if at_charging_station and not goal_reached:
+        if at_charging_station and not goal_just_reached and not base_reached:
             station_idx = self.charging_station_dict[(next_y, next_x)]
             if (visited_mask & (1 << station_idx)) == 0:
                 energy = min(self.max_energy, energy + 50)
                 new_visited_mask |= (1 << station_idx)
         
-        next_state = (next_y, next_x, energy, time_step, new_visited_mask, action, action)
-        reward = self._calculate_reward(energy_cost, time_step, energy, goal_reached, at_charging_station, old_distance, new_distance)
-        done = goal_reached or energy <= 0 or time_step >= self.max_time
+        next_state = (next_y, next_x, energy, time_step, new_visited_mask, action, action, new_goal_reached)
+        reward = self._calculate_reward(energy_cost, time_step, energy, goal_just_reached, base_reached, at_charging_station, old_distance, new_distance, new_goal_reached)
+        done = base_reached or energy <= 0 or time_step >= self.max_time
         
-        return next_state, reward, done, {'goal_reached': goal_reached, 'at_charging_station': at_charging_station, 'energy_used': energy_cost, 'energy_remaining': energy}
+        return next_state, reward, done, {'goal_reached': goal_just_reached, 'base_reached': base_reached, 'at_charging_station': at_charging_station, 'energy_used': energy_cost, 'energy_remaining': energy}
     
-    def _calculate_reward(self, energy_cost, time_step, energy, goal_reached, at_charging_station, old_distance, new_distance):
-        goal_bonus = 1000.0 if goal_reached else 0
-        time_penalty = 0.01 * time_step
-        energy_penalty = 2.0 * energy_cost
+    def _calculate_reward(self, energy_cost, time_step, energy, goal_just_reached, base_reached, at_charging_station, old_distance, new_distance, goal_reached, overlap_penalty=0):
+        base_bonus = 1500.0 if base_reached else 0
+        goal_bonus = 1000.0 if goal_just_reached else 0
+        time_penalty = 0.002 * time_step
+        energy_penalty = 1.0 * energy_cost
         depletion_penalty = 300.0 if energy <= 0 else 0
         charging_bonus = 75.0 if at_charging_station else 0
-        distance_reward = 0.5 * (old_distance - new_distance)
+        distance_reward = 1.0 * (old_distance - new_distance)
 
-        return goal_bonus - time_penalty - energy_penalty + charging_bonus - depletion_penalty + distance_reward
+        return base_bonus + goal_bonus - time_penalty - energy_penalty + charging_bonus - depletion_penalty + distance_reward
     
     def get_observation(self, state):
-        y, x, energy, time_step, visited_mask, _, _ = state
+        y, x, energy, time_step, visited_mask, _, _, goal_reached = state
         local_grid = np.zeros((5, 5))
         for dy in range(-2, 3):
             for dx in range(-2, 3):
@@ -203,6 +228,15 @@ class RoverMDP:
                     local_grid[dy+2, dx+2] = self.terrain[ny, nx] / 10.0  
                 else:
                     local_grid[dy+2, dx+2] = -1  
+        
+        if goal_reached:
+            objective_dy, objective_dx = self.start[0] - y, self.start[1] - x
+            objective_distance = abs(objective_dy) + abs(objective_dx)
+            objective_direction = np.arctan2(objective_dy, objective_dx)
+        else:
+            objective_dy, objective_dx = self.goal[0] - y, self.goal[1] - x
+            objective_distance = abs(objective_dy) + abs(objective_dx)
+            objective_direction = np.arctan2(objective_dy, objective_dx)
         
         goal_dy, goal_dx = self.goal[0] - y, self.goal[1] - x
         goal_distance = abs(goal_dy) + abs(goal_dx)
@@ -226,11 +260,14 @@ class RoverMDP:
             'local_grid': local_grid,
             'goal_direction': goal_direction,
             'goal_distance': goal_distance,
+            'objective_direction': objective_direction,
+            'objective_distance': objective_distance,
             'energy': energy,
             'time': time_step,
             'max_energy': self.max_energy,
             'start_direction': start_direction,
             'start_distance': start_distance,
             'charging_stations': charging_info,
-            'position': (y, x)
+            'position': (y, x),
+            'goal_reached': goal_reached
         }
