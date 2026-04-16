@@ -2,10 +2,25 @@ import numpy as np
 from collections import namedtuple
 
 class RoverMDP:
+    """Represents a rover made to move through a grid simulation"""
+
     ACTION_NAMES = ["Up", "Down", "Left", "Right"]
     DELTAS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     
     def __init__(self, terrain, charging_stations, goal, start, max_energy=100, max_time=500, max_slope=2.0):
+        """
+        Constructor for the RoverMDP class
+
+        Parameters:
+            terrain (MarsTerrain): A 2d simulation of terrain with elevation
+            charging_stations (list): A list of the locations of all charging stations
+            goal (tuple): The rover's target location
+            start (tuple): The rover's starting location
+            max_energy (int): The rover's maximum energy
+            max_time (int): The maximum time the rover is allowed to move
+            max_slope (float): The steepest slop the rover can traverse
+        """
+
         self.height, self.width = terrain.shape
         assert self.width == 30 and self.height == 20, "Map must be 30x20"
         self.max_slope = max_slope
@@ -25,11 +40,17 @@ class RoverMDP:
         self.energy_stop = 0.3  
         self.energy_elevation_factor = 0.15  
         self.energy_per_step = 0.1  
-        
-    def get_state_key(self, y, x, energy, time_step, visited_mask, last_action, last_dir):
-        return (y, x, int(energy*10), time_step, visited_mask, last_action, last_dir)
     
     def get_elevation_cost(self, from_y, from_x, to_y, to_x):
+        """
+        Gets the cost of moving the rover from one elevation to another
+
+        Parameters:
+            from_y (int): y coordinate of starting position
+            from_x (int): x coordinate of starting position
+            to_y (int): y coordinate of ending position
+            to_x (int): x coordinate of ending position
+        """
         if not (0 <= to_y < self.height and 0 <= to_x < self.width):
             return 0
         
